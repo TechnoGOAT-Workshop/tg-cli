@@ -24,26 +24,24 @@ class EnvironmentService(Protocol):
 class Boto3EnvironmentService:
     """The only layer that knows how AWS credentials and boto3 clients work."""
 
-    class Boto3EnvironmentService:
-
-        def __init__(self, session: boto3.Session) -> None:
-            self._session = session
-            self._ec2 = session.client("ec2")
-            self._rds = session.client("rds")
+    def __init__(self, session: boto3.Session) -> None:
+        self._session = session
+        self._ec2 = session.client("ec2")
+        self._rds = session.client("rds")
 
     def identity(self) -> dict:
         sts = self._session.client("sts")
         return sts.get_caller_identity()
 
     @classmethod
-    def from_config(cls, environment: EnvironmentConfig) -> "Boto3EnvironmentService":
+    def from_config(cls, environment: Environment) -> "Boto3EnvironmentService":
         session = boto3.Session(
             profile_name=environment.profile,
             region_name=environment.region,
         )
         return cls(session)
 
-    def status(self, environment: EnvironmentConfig) -> list[ResourceStatus]:
+    def status(self, environment: Environment) -> list[ResourceStatus]:
         statuses: list[ResourceStatus] = []
         if environment.ec2:
             response = self._ec2.describe_instances(InstanceIds=list(environment.ec2))
@@ -64,7 +62,7 @@ class Boto3EnvironmentService:
             )
         return statuses
 
-    def start(self, environment: EnvironmentConfig) -> None:
+    def start(self, environment: Environment) -> None:
         if environment.ec2:
             self._ec2.start_instances(InstanceIds=list(environment.ec2))
             self._ec2.get_waiter("instance_running").wait(InstanceIds=list(environment.ec2))
@@ -74,7 +72,7 @@ class Boto3EnvironmentService:
                 DBInstanceIdentifier=identifier
             )
 
-    def stop(self, environment: EnvironmentConfig) -> None:
+    def stop(self, environment: Environment) -> None:
         if environment.ec2:
             self._ec2.stop_instances(InstanceIds=list(environment.ec2))
             self._ec2.get_waiter("instance_stopped").wait(InstanceIds=list(environment.ec2))
