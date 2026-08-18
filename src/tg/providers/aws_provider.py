@@ -1,6 +1,7 @@
 import boto3
 
 from tg.domain.environment import Environment
+from tg.domain.resource import ResourceType
 from tg.domain.status import EnvironmentStatus
 from tg.services.environment_service import EnvironmentService
 
@@ -27,11 +28,47 @@ class Boto3EnvironmentService(EnvironmentService):
     def identity(self) -> dict:
         return self._session.client("sts").get_caller_identity()
 
+    from tg.domain.status import EnvironmentStatus
+
     def status(self, environment: Environment) -> EnvironmentStatus:
-        return EnvironmentStatus.UNKNOWN
+        states = []
+
+        for resource in environment.resources:
+            if resource.type == ResourceType.COMPUTE:
+                states.append(self._get_ec2_status(resource.name))
+
+        if not states:
+            return EnvironmentStatus.UNKNOWN
+
+        if all(state == "running" for state in states):
+            return EnvironmentStatus.RUNNING
+
+        if all(state == "stopped" for state in states):
+            return EnvironmentStatus.STOPPED
+
+        return EnvironmentStatus.PARTIAL
 
     def start(self, environment: Environment) -> None:
         pass
 
     def stop(self, environment: Environment) -> None:
         pass
+
+    def _get_ec2_status(self, name: str) -> str:
+        response = self._ec2.describe_instances(
+            Filters=[
+                {
+                    "Name": "tag:Name",
+                    "Values": [name],
+                }
+            ]
+        )
+
+        reservations = response["Reservations"]
+
+        if not reservations:
+            return "unknown"
+
+        instance = reservations[0]["Instances"][0]
+
+        return instance["State"]["Name"]
