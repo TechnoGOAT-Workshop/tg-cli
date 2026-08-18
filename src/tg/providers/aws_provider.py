@@ -3,7 +3,7 @@ from typing import Protocol
 
 import boto3
 
-from tg.config.loader import EnvironmentConfig
+from tg.config.loader import Environment
 
 
 @dataclass(frozen=True)
@@ -14,19 +14,26 @@ class ResourceStatus:
 
 
 class EnvironmentService(Protocol):
-    def status(self, environment: EnvironmentConfig) -> list[ResourceStatus]: ...
+    def status(self, environment: Environment) -> list[ResourceStatus]: ...
 
-    def start(self, environment: EnvironmentConfig) -> None: ...
+    def start(self, environment: Environment) -> None: ...
 
-    def stop(self, environment: EnvironmentConfig) -> None: ...
+    def stop(self, environment: Environment) -> None: ...
 
 
 class Boto3EnvironmentService:
     """The only layer that knows how AWS credentials and boto3 clients work."""
 
-    def __init__(self, session: boto3.Session) -> None:
-        self._ec2 = session.client("ec2")
-        self._rds = session.client("rds")
+    class Boto3EnvironmentService:
+
+        def __init__(self, session: boto3.Session) -> None:
+            self._session = session
+            self._ec2 = session.client("ec2")
+            self._rds = session.client("rds")
+
+    def identity(self) -> dict:
+        sts = self._session.client("sts")
+        return sts.get_caller_identity()
 
     @classmethod
     def from_config(cls, environment: EnvironmentConfig) -> "Boto3EnvironmentService":
@@ -76,4 +83,3 @@ class Boto3EnvironmentService:
             self._rds.get_waiter("db_instance_stopped").wait(
                 DBInstanceIdentifier=identifier
             )
-
