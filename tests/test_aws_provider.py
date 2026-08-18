@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from tg.providers.aws_provider import Boto3EnvironmentService
+from tg.services.environment_service import EnvironmentService
 
 
 def test_identity_uses_sts():
@@ -20,3 +21,10 @@ def test_identity_uses_sts():
 
     assert identity["Account"] == "147997115266"
     session.client.assert_called_with("sts")
+
+def test_aws_service_implements_environment_service():
+    session = Mock()
+
+    service = Boto3EnvironmentService(session)
+
+    assert isinstance(service, EnvironmentService)
