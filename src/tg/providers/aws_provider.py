@@ -3,8 +3,7 @@ from typing import Protocol
 
 import boto3
 
-from tg.config.loader import Environment
-
+from tg.domain.environment import Environment
 
 @dataclass(frozen=True)
 class ResourceStatus:
@@ -34,7 +33,7 @@ class Boto3EnvironmentService:
         return sts.get_caller_identity()
 
     @classmethod
-    def from_config(cls, environment: Environment) -> "Boto3EnvironmentService":
+    def from_environment(cls, environment: Environment) -> "Boto3EnvironmentService":
         session = boto3.Session(
             profile_name=environment.profile,
             region_name=environment.region,
