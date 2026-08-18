@@ -20,3 +20,17 @@ def status(ctx: typer.Context, name: str):
     typer.echo(
         f"{name}: {result.value}"
     )
+
+@env_app.command("stop")
+def stop(ctx: typer.Context, name: str):
+    environment = load_environment(
+        name,
+        ctx.obj["config_path"],
+    )
+
+    service = get_environment_service(environment)
+
+    stopped = service.stop(environment)
+
+    for resource in stopped:
+        print(f"Stopped: {resource}")

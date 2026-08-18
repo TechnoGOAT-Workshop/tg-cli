@@ -14,5 +14,5 @@ class EnvironmentService(ABC):
         pass
 
     @abstractmethod
-    def stop(self, environment: Environment) -> None:
+    def stop(self, environment: Environment) -> list[str]:
         pass

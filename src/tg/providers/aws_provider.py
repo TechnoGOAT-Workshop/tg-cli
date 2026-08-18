@@ -51,8 +51,20 @@ class Boto3EnvironmentService(EnvironmentService):
     def start(self, environment: Environment) -> None:
         pass
 
-    def stop(self, environment: Environment) -> None:
-        pass
+    def stop(self, environment: Environment) -> list[str]:
+        stopped = []
+
+        for resource in environment.resources:
+            if resource.type == ResourceType.COMPUTE:
+                instance_id = self._find_instance_id(resource.name)
+
+                self._ec2.stop_instances(
+                    InstanceIds=[instance_id]
+                )
+
+                stopped.append(resource.name)
+
+        return stopped
 
     def _get_ec2_status(self, name: str) -> str:
         response = self._ec2.describe_instances(
@@ -72,3 +84,22 @@ class Boto3EnvironmentService(EnvironmentService):
         instance = reservations[0]["Instances"][0]
 
         return instance["State"]["Name"]
+
+    def _find_instance_id(self, name: str) -> str:
+        response = self._ec2.describe_instances(
+            Filters=[
+                {
+                    "Name": "tag:Name",
+                    "Values": [name],
+                }
+            ]
+        )
+
+        reservations = response.get("Reservations", [])
+
+        if not reservations:
+            raise ValueError(
+                f"No compute resource found with name {name}"
+            )
+
+        return reservations[0]["Instances"][0]["InstanceId"]
