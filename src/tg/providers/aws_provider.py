@@ -1,7 +1,11 @@
 import boto3
 
 from tg.domain.environment import Environment
+from tg.domain.operation_plan import OperationPlan
+from tg.domain.operation_result import OperationResult
 from tg.domain.resource import ResourceType
+from tg.domain.resource_action import Action, ResourceAction
+from tg.domain.resource_result import ResourceResult
 from tg.domain.status import EnvironmentStatus
 from tg.services.environment_service import EnvironmentService
 
@@ -16,8 +20,8 @@ class Boto3EnvironmentService(EnvironmentService):
 
     @classmethod
     def from_environment(
-        cls,
-        environment: Environment,
+            cls,
+            environment: Environment,
     ) -> "Boto3EnvironmentService":
         session = boto3.Session(
             profile_name=environment.profile,
@@ -51,20 +55,94 @@ class Boto3EnvironmentService(EnvironmentService):
     def start(self, environment: Environment) -> None:
         pass
 
-    def stop(self, environment: Environment) -> list[str]:
-        stopped = []
+    def plan_stop(self, environment: Environment) -> OperationPlan:
+        actions = []
 
         for resource in environment.resources:
             if resource.type == ResourceType.COMPUTE:
-                instance_id = self._find_instance_id(resource.name)
+                current_status = self._get_ec2_status(resource.name)
 
-                self._ec2.stop_instances(
-                    InstanceIds=[instance_id]
+                if current_status == "running":
+                    actions.append(
+                        ResourceAction(
+                            kind=resource.type.value,
+                            identifier=resource.name,
+                            current_status=current_status,
+                            target_status="stopped",
+                            action=Action.STOP,
+                        )
+                    )
+
+                elif current_status == "stopped":
+                    actions.append(
+                        ResourceAction(
+                            kind=resource.type.value,
+                            identifier=resource.name,
+                            current_status=current_status,
+                            target_status="stopped",
+                            action=Action.NONE,
+                            reason="Already stopped",
+                        )
+                    )
+
+        return OperationPlan(
+            environment_name=environment.name,
+            operation="stop",
+            actions=tuple(actions),
+        )
+
+    def apply(
+            self,
+            plan: OperationPlan,
+    ) -> OperationResult:
+        results = []
+
+        for resource_action in plan.actions:
+            if resource_action.action is Action.NONE:
+                results.append(
+                    ResourceResult(
+                        kind=resource_action.kind,
+                        identifier=resource_action.identifier,
+                        previous_status=resource_action.current_status,
+                        current_status=resource_action.current_status,
+                        success=True,
+                        message=resource_action.reason,
+                    )
+                )
+                continue
+
+            if resource_action.action is Action.STOP:
+                self._stop_ec2_instance(
+                    resource_action.identifier
                 )
 
-                stopped.append(resource.name)
+                current_status = self._get_ec2_status(
+                    resource_action.identifier
+                )
 
-        return stopped
+                success = (
+                        current_status
+                        == resource_action.target_status
+                )
+
+                results.append(
+                    ResourceResult(
+                        kind=resource_action.kind,
+                        identifier=resource_action.identifier,
+                        previous_status=resource_action.current_status,
+                        current_status=current_status,
+                        success=success,
+                        message=None if success else (
+                            "Resource did not reach target state"
+                        ),
+                    )
+                )
+
+        return OperationResult(
+            environment_name=plan.environment_name,
+            operation=plan.operation,
+            resources=tuple(results),
+        )
 
     def _get_ec2_status(self, name: str) -> str:
         response = self._ec2.describe_instances(
@@ -103,3 +181,21 @@ class Boto3EnvironmentService(EnvironmentService):
             )
 
         return reservations[0]["Instances"][0]["InstanceId"]
+
+    def _stop_ec2_instance(
+            self,
+            name: str,
+    ) -> None:
+        instance_id = self._find_instance_id(name)
+
+        self._ec2.stop_instances(
+            InstanceIds=[instance_id]
+        )
+
+        waiter = self._ec2.get_waiter(
+            "instance_stopped"
+        )
+
+        waiter.wait(
+            InstanceIds=[instance_id]
+        )

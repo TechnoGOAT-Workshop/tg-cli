@@ -1,8 +1,9 @@
+from unittest.mock import Mock
+
+from tg.domain.environment import Environment
 from tg.domain.resource import Resource, ResourceType
 from tg.domain.status import EnvironmentStatus
 from tg.providers.aws_provider import Boto3EnvironmentService
-
-from tg.domain.environment import Environment
 from tg.services.environment_service import EnvironmentService
 
 
